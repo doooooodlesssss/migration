@@ -26,7 +26,7 @@ async def startup_event():
     # Import data from CSV if collection is empty
     collection = get_collection("migration_data")
     if collection.count_documents({}) == 0:
-        import_data_from_csv("data/migration_data.csv")
+        import_data_from_csv("data/migration_data.csv", "migration_data")
 
 # if __name__ == "__main__":
 #     uvicorn.run(app, host="0.0.0.0", port=8000)
