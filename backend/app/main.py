@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import analytics, reports
 import uvicorn
-from app.database import import_data_from_csv
+from app.database import import_data_from_csv, get_collection  # <-- Fix here
+# from app.database import import_data_from_csv
 import os
 
 app = FastAPI(title="Global Migration & Refugee Movement Insight Tool")
@@ -27,5 +28,11 @@ async def startup_event():
     if collection.count_documents({}) == 0:
         import_data_from_csv("data/migration_data.csv")
 
+# if __name__ == "__main__":
+#     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8080)
+
+
+

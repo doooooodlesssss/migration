@@ -1,0 +1,6 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/compact-voyager-462606-r9/migration-backend', '-f', 'deployment/Dockerfile.backend', '.']
+
+images:
+  - 'gcr.io/compact-voyager-462606-r9/migration-backend'
