@@ -1,0 +1,16 @@
+.pattern-search {
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-row {
+    display: flex;
+    gap: 15px;
+}
+
+.results {
+    margin-top: 20px;
+}

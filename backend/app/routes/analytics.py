@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException
 from app.database import migration_collection
-import pandas as pd
 from datetime import datetime
 
 router = APIRouter()
@@ -8,64 +7,142 @@ router = APIRouter()
 @router.get("/analytics/summary")
 async def get_summary_analytics():
     try:
-        # Get total refugees by year
-        pipeline = [
-            {"$group": {"_id": "$year", "total_refugees": {"$sum": "$refugees"}}},
+        # 1. Verify collection exists
+        if "migration_data" not in await migration_collection.database.list_collection_names():
+            raise HTTPException(status_code=404, detail="Collection not found")
+
+        # 2. Get refugees by year (with proper field names)
+        refugees_by_year = list(migration_collection.aggregate([
+            {
+                "$group": {
+                    "_id": "$Year",  # Match exact field name in DB
+                    "total_refugees": {
+                        "$sum": {
+                            "$ifNull": [
+                                {"$toInt": "$Refugees"},  # Simplified conversion
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
             {"$sort": {"_id": 1}}
-        ]
-        refugees_by_year = list(migration_collection.aggregate(pipeline))
-        
-        # Get top origin countries
-        pipeline = [
-            {"$group": {"_id": "$country_of_origin", "total_refugees": {"$sum": "$refugees"}}},
+        ]))
+
+        # 3. Get top origins (with field name validation)
+        top_origins = list(migration_collection.aggregate([
+            {
+                "$group": {
+                    "_id": "$Country of Origin",  # Exact field name
+                    "total_refugees": {
+                        "$sum": {
+                            "$ifNull": [
+                                {"$toInt": "$Refugees"},
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
             {"$sort": {"total_refugees": -1}},
-            {"$limit": 5}
-        ]
-        top_origins = list(migration_collection.aggregate(pipeline))
-        
-        # Get top asylum countries
-        pipeline = [
-            {"$group": {"_id": "$country_of_asylum", "total_refugees": {"$sum": "$refugees"}}},
+            {"$limit": 5},
+            {"$match": {"_id": {"$ne": None}}}  # Exclude null values
+        ]))
+
+        # 4. Get top asylums
+        top_asylums = list(migration_collection.aggregate([
+            {
+                "$group": {
+                    "_id": "$Country of Asylum",  # Exact field name
+                    "total_refugees": {
+                        "$sum": {
+                            "$ifNull": [
+                                {"$toInt": "$Refugees"},
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
             {"$sort": {"total_refugees": -1}},
-            {"$limit": 5}
-        ]
-        top_asylums = list(migration_collection.aggregate(pipeline))
-        
+            {"$limit": 5},
+            {"$match": {"_id": {"$ne": None}}}
+        ]))
+
+        # 5. Validate results
+        if not refugees_by_year or not top_origins or not top_asylums:
+            raise HTTPException(status_code=404, detail="No data found with current schema")
+
         return {
+            "status": "success",
             "refugees_by_year": refugees_by_year,
             "top_origins": top_origins,
-            "top_asylums": top_asylums
+            "top_asylums": top_asylums,
+            "timestamp": datetime.now().isoformat()
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 @router.get("/analytics/country/{country_iso}")
 async def get_country_analytics(country_iso: str):
     try:
         # As origin country
         origin_pipeline = [
-            {"$match": {"country_of_origin_iso": country_iso}},
+            {"$match": {"Country of Origin ISO": country_iso}},  # Match exact field name
             {"$group": {
-                "_id": "$year",
-                "refugees": {"$sum": "$refugees"},
-                "asylum_seekers": {"$sum": "$asylum_seekers"}
+                "_id": "$Year",
+                "refugees": {
+                    "$sum": {
+                        "$ifNull": [
+                            {"$toInt": "$Refugees"},
+                            0
+                        ]
+                    }
+                },
+                "asylum_seekers": {
+                    "$sum": {
+                        "$ifNull": [
+                            {"$toInt": "$Asylum Seekers"},
+                            0
+                        ]
+                    }
+                }
             }},
             {"$sort": {"_id": 1}}
         ]
-        origin_data = list(migration_collection.aggregate(origin_pipeline))
         
         # As asylum country
         asylum_pipeline = [
-            {"$match": {"country_of_asylum_iso": country_iso}},
+            {"$match": {"Country of Asylum ISO": country_iso}},  # Match exact field name
             {"$group": {
-                "_id": "$year",
-                "refugees_received": {"$sum": "$refugees"},
-                "asylum_seekers_received": {"$sum": "$asylum_seekers"}
+                "_id": "$Year",
+                "refugees_received": {
+                    "$sum": {
+                        "$ifNull": [
+                            {"$toInt": "$Refugees"},
+                            0
+                        ]
+                    }
+                },
+                "asylum_seekers_received": {
+                    "$sum": {
+                        "$ifNull": [
+                            {"$toInt": "$Asylum Seekers"},
+                            0
+                        ]
+                    }
+                }
             }},
             {"$sort": {"_id": 1}}
         ]
+
+        origin_data = list(migration_collection.aggregate(origin_pipeline))
         asylum_data = list(migration_collection.aggregate(asylum_pipeline))
-        
+
+        if not origin_data and not asylum_data:
+            raise HTTPException(status_code=404, detail="Country not found")
+
         return {
             "as_origin": origin_data,
             "as_asylum": asylum_data

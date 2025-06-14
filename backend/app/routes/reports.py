@@ -33,21 +33,32 @@ def generate_pdf(content, title):
 @router.post("/reports/generate")
 async def generate_report(request: ReportRequest):
     try:
-        if request.report_type == "hotspots":
-            content = generate_hotspot_analysis(request.countries, request.years)
-            title = "Refugee Hotspot Analysis Report"
-        elif request.report_type == "impact":
-            content = generate_impact_report(request.countries, request.years)
-            title = "Refugee Impact Analysis Report"
-        else:
+        print("Report request:", request.dict())  # Debug log
+        
+        if not request.countries or not request.years:
+            raise HTTPException(status_code=400, detail="Countries and years are required")
+        
+        if request.report_type not in ["hotspots", "impact"]:
             raise HTTPException(status_code=400, detail="Invalid report type")
         
+        # Generate report content
+        if request.report_type == "hotspots":
+            content = generate_hotspot_analysis(request.countries, request.years)
+            title = "Hotspot Analysis Report"
+        else:
+            content = generate_impact_report(request.countries, request.years)
+            title = "Impact Analysis Report"
+        
+        # Generate PDF
         pdf_buffer = generate_pdf(content, title)
         
         return StreamingResponse(
             pdf_buffer,
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={request.report_type}_report.pdf"}
+            headers={
+                "Content-Disposition": f"attachment; filename={title.replace(' ', '_')}.pdf"
+            }
         )
     except Exception as e:
+        print("Report generation error:", str(e))  # Debug log
         raise HTTPException(status_code=500, detail=str(e))
