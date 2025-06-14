@@ -1,0 +1,53 @@
+from fastapi import APIRouter, HTTPException
+from app.models.migration import ReportRequest
+from app.services.google_ai import generate_hotspot_analysis, generate_impact_report
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from io import BytesIO
+from fastapi.responses import StreamingResponse
+
+router = APIRouter()
+
+def generate_pdf(content, title):
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    
+    # Add title
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(72, 750, title)
+    
+    # Add content
+    pdf.setFont("Helvetica", 12)
+    y_position = 700
+    for line in content.split('\n'):
+        if y_position < 50:
+            pdf.showPage()
+            y_position = 750
+        pdf.drawString(72, y_position, line)
+        y_position -= 15
+    
+    pdf.save()
+    buffer.seek(0)
+    return buffer
+
+@router.post("/reports/generate")
+async def generate_report(request: ReportRequest):
+    try:
+        if request.report_type == "hotspots":
+            content = generate_hotspot_analysis(request.countries, request.years)
+            title = "Refugee Hotspot Analysis Report"
+        elif request.report_type == "impact":
+            content = generate_impact_report(request.countries, request.years)
+            title = "Refugee Impact Analysis Report"
+        else:
+            raise HTTPException(status_code=400, detail="Invalid report type")
+        
+        pdf_buffer = generate_pdf(content, title)
+        
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={request.report_type}_report.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
